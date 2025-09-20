@@ -1,13 +1,17 @@
 const express = require('express');
-const { registerUser, loginUser, getMe } = require('../controllers/auth.controller');
-const authMiddleware = require('../middlewares/auth.middleware'); // Import the middleware
+const { registerUser, loginUser, getMe, sendOtp, verifyOtp } = require('../controllers/auth.controller');
+
+const authMiddleware = require('../middlewares/auth.middleware');
 
 const router = express.Router();
 
+// Public routes
 router.post('/register', registerUser);
-router.post('/login', loginUser);
+router.post('/login', loginUser);        // ← Password login (kept intact)
+router.post('/otp/send', sendOtp);       // ← New OTP send route
+router.post('/otp/verify', verifyOtp);   // ← New OTP verify route
 
-// Add the protected route. The authMiddleware runs first, then getMe.
+// Protected routes
 router.get('/me', authMiddleware, getMe);
 
 module.exports = router;

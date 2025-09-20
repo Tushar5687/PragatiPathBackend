@@ -119,8 +119,118 @@ const getMe = async (req, res) => {
     user: req.user
   });
 };
+const { generateOTP, storeOTP, verifyOTP } = require('../utils/otpUtils');
+
+// @desc    Send OTP for login
+// @route   POST /auth/otp/send
+// @access  Public
+const sendOtp = async (req, res) => {
+  try {
+    const { mobile } = req.body;
+
+    // Validate mobile number
+    if (!mobile) {
+      return res.status(400).json({ error: 'Mobile number is required.' });
+    }
+
+    // Clean mobile number (remove spaces, +91, etc.)
+    const cleanMobile = mobile.replace(/\D/g, '');
+    
+    if (cleanMobile.length < 10) {
+      return res.status(400).json({ error: 'Invalid mobile number.' });
+    }
+
+    // Generate and store OTP
+    const otp = generateOTP();
+    storeOTP(cleanMobile, otp);
+
+    // console.log the OTP for development
+    console.log(`📱 OTP for ${cleanMobile}: ${otp}`);
+    console.log(`⏰ OTP valid for 10 minutes`);
+
+    res.json({ 
+      success: true,
+      message: 'OTP sent successfully.',
+      mobile: cleanMobile
+    });
+
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500).json({ error: 'Failed to send OTP. Please try again.' });
+  }
+};
+
+// @desc    Verify OTP and login
+// @route   POST /auth/otp/verify
+// @access  Public
+const verifyOtp = async (req, res) => {
+  try {
+    let { mobile, otp } = req.body;
+
+    // Validate input
+    if (!mobile || !otp) {
+      return res.status(400).json({ error: 'Mobile number and OTP are required.' });
+    }
+
+    // Clean mobile number
+    mobile = mobile.replace(/\D/g, '');
+    
+    if (mobile.length < 10) {
+      return res.status(400).json({ error: 'Invalid mobile number.' });
+    }
+
+    // Verify OTP
+    const verification = verifyOTP(mobile, otp);
+    
+    if (!verification.isValid) {
+      return res.status(400).json({ error: verification.message });
+    }
+
+    // Find or create user
+    let user = await User.findOne({ mobile });
+
+    if (!user) {
+      // Create new user with mobile only
+      user = await User.create({
+        mobile,
+        name: `User-${mobile.substring(mobile.length - 4)}`,
+        roles: ['citizen']
+      });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(401).json({ error: 'Account is suspended. Please contact support.' });
+    }
+
+    // Generate JWT token (same as password login)
+    const token = jwt.sign(
+      { userId: user._id, roles: user.roles },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      message: 'OTP verified successfully.',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        mobile: user.mobile,
+        roles: user.roles
+      }
+    });
+
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({ error: 'Failed to verify OTP. Please try again.' });
+  }
+};
 module.exports = {
   registerUser,
   loginUser,
-  getMe
+  getMe,
+  sendOtp,     // ← Add this
+  verifyOtp    // ← Add this
 };
